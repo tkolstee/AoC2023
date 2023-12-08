@@ -6,6 +6,10 @@ from ProgressDot import ProgressDot
 
 
 class Directions:
+    """ 
+    Iterable that provides never-ending loops of the directions,
+    and keeps track of calls (steps).
+    """
     def __init__(self, dir_str):
         self.dirs = dir_str
         self.steps = 0
