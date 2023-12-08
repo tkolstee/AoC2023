@@ -1,130 +1,100 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 import sys
-import os
 import re
 
-path = ['seed', 'soil', 'fertilizer', 'water', 'light',
-        'temperature', 'humidity', 'location'
-]
+def rng_intersect(a, b):
+    """
+    Returns a 3-element array: before, overlap, after.
+    Overlap is a range of common elements between A and B.
+    Before and after represent elements in A not in B.
+    Ranges for which no values exist are replaced by None.    
+    """
+    if not (isinstance(a, range) and isinstance(b, range)):
+        raise ValueError("Both inputs must be ranges.")
+    if not (a.step == 1 and b.step == 1):
+        raise ValueError("Both input ranges must have step=1.")
 
+    before = None
+    after = None
+    overlap = None
 
-def resolve_map(map, input, reverse=False, return_orig_on_unfound=True):
-    for entry in map:
-        if reverse:
-            src_start, dest_start, rng = entry
-        else:
-            dest_start, src_start, rng = entry
-
-        src_pos = input - src_start
-        if src_pos >= 0 and src_pos < rng:
-            return dest_start + src_pos
-    if return_orig_on_unfound:
-        return input
+    if b.start >= a.stop:   # No overlap, all in "before"
+        before = a
+    elif b.stop <= a.start: # No overlap, all in "after"
+        after = a
+    elif a.start >= b.start and a.stop <= b.stop:  # All-overlap
+        overlap = a
     else:
-        raise RuntimeError
+        overlap = range( max(a.start, b.start), min(a.stop, b.stop) )
 
+        if b.start > a.start:
+            before = range(a.start, b.start)
 
-def get_cmdline():
-    if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} filename")
-        sys.exit(1)
+        if b.stop < a.stop:
+            after = range(b.stop, a.stop)
 
-    filename = sys.argv[1]
-    if not os.path.isfile(filename):
-        print(f"Input file {filename} not found.")
-        sys.exit(1)
+    return [before, overlap, after]
 
-    return filename
-
-
-def read_data(filename):
-    maps = {}
-    seeds = []
-    cur_map = None
+def main(filename):
     with open(filename, 'r') as f:
+        ranges = []
+        seedranges = [int(x) for x in f.readline().strip().split()[1:] ]
+        for i in range(0, len(seedranges), 2):
+            start = seedranges[i]
+            end = start + seedranges[i+1]
+            ranges.append(range(start, end))
+        ranges.sort(key=lambda x: x.stop)
+        
+        new_ranges = []
         for line in f:
             line.strip()
 
-            if re.match('^\s*$', line):
-                continue
+            if 'map' in line:
+                ranges += new_ranges
+                ranges.sort(key=lambda x: x.start)
+                #print(ranges)
+                new_ranges = []
+                #print("------------------------------")
+                print(f"{len(ranges)} ranges")
+                print("------"+line.upper())
 
-            m = re.match('\s*seeds:\s*(\d.*\d)\s*', line)
+
+            m = re.match('^(\d+)\s+(\d+)\s+(\d+)$', line)
             if m:
-                seeds = [ int(x) for x in re.split('\s+', m.group(1)) ]
-
-            m = re.match('\s*(\S+)-to-(\S+)\smap:\s*', line)
-            if m:
-                cur_map = (m.group(1), m.group(2))
-                maps[cur_map] = []
-            
-            m = re.match('\s*(\d+)\s+(\d+)\s+(\d+)\s*', line)
-            if m:
-                if cur_map is None:
-                    print(f"Numbers with no map: '{line}'")
-                    sys.exit(1)
-                maps[cur_map].append( tuple([int(x) for x in m.groups()]) )
-    return seeds, maps
-
-
-def resolve_seed(seed, maps):
-    loc = seed
-    for i in range(1, len(path)):
-        have = path[i-1]
-        need = path[i]
-        the_map = maps[(have, need)]
-        loc = resolve_map(the_map, loc)
-    return loc
+                #print(f"-- Applying filter: {line}")
+                dststart, srcstart, rngsize = [ int(x) for x in m.groups() ]
+                xlate = range(srcstart, srcstart + rngsize)
+                add_op = dststart - srcstart
+                kept_ranges = []
+                for rng in ranges:
+                    #print(f"  -- RANGE: {rng}")
+                    before, overlap, after = rng_intersect(rng, xlate)
+                    if before is not None:
+                        #print(f"    -- KEEP: {before.start}-{before.stop}")
+                        kept_ranges.append(before)
+                    if after is not None:
+                        #print(f"    -- KEEP: {after.start}-{after.stop}")
+                        kept_ranges.append(after)
+                    if overlap is not None:
+                        newrange = range(overlap.start+add_op, overlap.stop+add_op)
+                        #print(f"    -- NEW: {overlap.start}-{overlap.stop} -> {newrange.start}-{newrange.stop}")
+                        new_ranges.append(newrange)
+                ranges = kept_ranges[:]
+                #print(f"  -- After Filter: {ranges} {new_ranges}")
 
 
-def resolve_loc(loc, maps):
-    seed = loc
-    print(f"Loc: {loc}", end="")
-    for i in range(len(path)-1, 0, -1):
-        have = path[i]
-        need = path[i-1]
-        the_map = maps[(need, have)]
-        mirror_lookup = (i < (len(path)-1) and i > 0)
-        seed = resolve_map(the_map, seed, reverse=True, return_orig_on_unfound=mirror_lookup)
-        print(f" -> {need} ({seed}) ", end="")
-    print("")
-    return seed
+        ranges += new_ranges
+        ranges.sort(key=lambda x: x.start)
+        #print(ranges)
+        new_ranges = []
+        print("------------------------------")
+        print(f"{len(ranges)} ranges")
+        ranges.sort(key=lambda x: x.start)
 
-
-def main():
-    filename = get_cmdline()
-    seeds, maps = read_data(filename)
-    seed = None
-    i = 1
-    while seed is None:
-        try:
-            seed = resolve_loc(i, maps)
-        except RuntimeError:
-            pass
-        i += 1
-    
-    print(seed)
-
-
-
-    # seed_ranges = []
-    # for i in range(0, len(seeds), 2):
-    #     seed_ranges = ()
-
-
-    # locs = []
-    # for i in range(0, len(seeds), 2):
-    #     start = seeds[i]
-    #     rng = seeds[i+1]
-    #     end = start + rng - 1
-    #     for seed in range(start, end):
-    #         locs.append(resolve_seed(seed, maps))
-
-    # print(locs)
-    # print(f"MIN: {min(locs)}")
-
-
+        #print(ranges)
+        print(f"Lowest value: {ranges[0].start}")
 
 if __name__ == '__main__':
-    main()
-
+    filename = sys.argv[1]
+    main(filename)
