@@ -20,34 +20,6 @@ def predict(seq):
         return p
 
 
-
-    # subseq = []
-    # prev = seq[0]
-
-    # is_terminal = (prev == 0)
-
-    # for i in seq[1:]:
-    #     subseq.append(i - prev)
-    #     prev = i
-    #     is_terminal = is_terminal and (prev == 0)
-
-    # if is_terminal:
-    #     print("T")
-    #     return 0
-
-    # p = predict(subseq)
-    # print(p)
-    # return p
-
-    # subseq = [ seq[i] - seq[i-1] for i in range(1, len(seq)) ]
-
-    # if sum(seq) == 0:
-    #     return 0
-    # else:
-    #     next = seq[-1] + predict(subseq)
-    #     return next
-
-
 def read_data(filename):
     data = []
     with open(filename, 'r') as f:
